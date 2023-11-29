@@ -7,6 +7,7 @@ from ber_tlv.tlv import Tlv
 from asn1crypto.csr import CertificationRequest, CertificationRequestInfo
 from asn1crypto.core import Asn1Value, UTF8String
 from asn1crypto.keys import PublicKeyInfo
+from asn1crypto.algos import SignedDigestAlgorithm,SignedDigestAlgorithmId
 from asn1crypto import x509
 
 from cryptography.hazmat.primitives import serialization
@@ -67,8 +68,15 @@ def admin_auth(ctx: Context, admin_key: str) -> None:
 @click.option(
     "--subject-name",
     type = click.STRING, 
+    required = True,
 )
-def generate_key(ctx: Context, admin_key: str, key: str, algo: str, subject_name: str) -> None:
+@click.option(
+    "--pin",
+    type = click.STRING,
+    prompt = "Enter the PIN",
+    hide_input = True,
+)
+def generate_key(ctx: Context, admin_key: str, key: str, algo: str, subject_name: str, pin: str) -> None:
     try:
         admin_key: bytes = bytearray.fromhex(admin_key)
     except:
@@ -81,13 +89,16 @@ def generate_key(ctx: Context, admin_key: str, key: str, algo: str, subject_name
     with ctx.connect_device() as device:
         device = PivApp(device)
         device.authenticate_admin(admin_key)
+        device.login(pin)
 
         if algo ==  "rsa2048":
             algo_id = b"\x07"
+            signature_algorithm = 'sha256_rsa'
         elif algo == "nistp256":
             algo_id = b"\x11"
+            signature_algorithm = 'sha256_ecdsa'
         else:
-            local_critical("Unimplemented algorithm")
+            local_critical("Unimplemented algorithm", support_hint = False)
 
         body = Tlv.build({0xAC: {0x80: algo_id}})
         ins = 0x47
@@ -128,5 +139,24 @@ def generate_key(ctx: Context, admin_key: str, key: str, algo: str, subject_name
             'subject_pk_info': public_key_info,
             'attributes': []
         })
-        sys.stdout.buffer.write(public_key_info.dump())
+
+        # To Be Signed
+        tbs = csr_info.dump()
+
+        if algo == "nistp256":
+            signature = device.sign_p256(tbs, key_ref)
+        elif algo == "rsa2048":
+            signature = device.sign_rsa2048(tbs, key_ref)
+        else:
+            local_critical("Unimplemented algorithm")
+            
+        csr = CertificationRequest({
+            'certification_request_info': csr_info,
+            'signature_algorithm': {
+                'algorithm': signature_algorithm,
+            },
+            'signature': signature
+        })
+        
+        sys.stdout.buffer.write(csr.dump())
 

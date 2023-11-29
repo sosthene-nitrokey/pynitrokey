@@ -2,6 +2,7 @@ import logging
 import os
 import typing
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import hashes
 from ber_tlv.tlv import Tlv
 
 from typing import Callable, List, Optional, Any, Sequence, Union
@@ -148,12 +149,24 @@ class PivApp:
         if decoded_challenge != our_challenge:
             local_critical("Failed to authenticate with administrator key", support_hint=False)
 
+    def login(self, pin: str):
+        body = pin.encode('utf-8')
+        body += bytes([0xFF for i in range(8 - len(body))])
+        self.send_receive(0x20, 0x00, 0x80, body)
 
-    def sign_p256(self, data: bytes) -> bytes:
-        pass
+
+    def sign_p256(self, data: bytes, key: int) -> bytes:
+        digest = hashes.Hash(hashes.SHA256())
+        digest.update(data)
+        payload = digest.finalize()
+        return self.raw_sign(payload, key, 0x11)
+        local_critical("Unimplemented")
 
     def sign_rsa2048(self, data: bytes) -> bytes:
+        local_critical("Unimplemented")
         pass
 
-    def  raw_sign(self, data: bytes, key: int, algo: int) -> bytes:
-        pass        
+    def raw_sign(self, payload: bytes, key: int, algo: int) -> bytes:
+        body = Tlv.build({0x7C: {0x81: payload, 0x82: b''}})
+        result = self.send_receive(0x87, algo, key, body)
+        return find_by_id(0x82, Tlv.parse(find_by_id(0x7C, Tlv.parse(result, recursive = False)), recursive = False))

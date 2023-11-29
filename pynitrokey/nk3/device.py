@@ -41,6 +41,7 @@ class Command(Enum):
     UUID = 0x62
     LOCKED = 0x63
     OTP = 0x70
+    PIV = 0x73
     PROVISIONER = 0x71
     ADMIN = 0x72
 
@@ -128,6 +129,9 @@ class Nitrokey3Device(Nitrokey3Base):
 
     def otp(self, data: bytes = b"") -> bytes:
         return self._call(Command.OTP, data=data)
+
+    def piv(self, data: bytes = b"") -> bytes:
+        return self._call(Command.PIV, data=data)
 
     def is_locked(self) -> bool:
         response = self._call(Command.LOCKED, response_len=1)

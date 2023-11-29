@@ -132,8 +132,8 @@ def main() -> None:
         if development:
             raise
         e.show()
-    except Exception as e:
-        if development:
-            raise
-        logger.warning("An unhandled exception occurred", exc_info=True)
-        local_critical("An unhandled exception occurred", e)
+    # except Exception as e:
+    #     if development:
+    #         raise
+    #     logger.warning("An unhandled exception occurred", exc_info=True)
+    #     local_critical("An unhandled exception occurred", e)

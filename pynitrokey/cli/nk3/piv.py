@@ -12,6 +12,7 @@ from asn1crypto import x509
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, ec
+from cryptography.hazmat.primitives.serialization import Encoding
 import cryptography
 
 from pynitrokey.cli.nk3 import Context, nk3
@@ -48,6 +49,33 @@ def admin_auth(ctx: Context, admin_key: str) -> None:
     
     pass
 
+KEY_TO_CERT_OBJ_ID_MAP = {
+    "9A": "5FC105",
+    "9C": "5FC10A",
+    "9D": "5FC10B",
+    "9E": "5FC101",
+    "82": "5FC10D",
+    "83": "5FC10E",
+    "84": "5FC10F",
+    "85": "5FC110",
+    "86": "5FC111",
+    "87": "5FC112",
+    "88": "5FC113",
+    "89": "5FC114",
+    "8A": "5FC115",
+    "8B": "5FC116",
+    "8C": "5FC117",
+    "8D": "5FC118",
+    "8E": "5FC119",
+    "8F": "5FC11A",
+    "90": "5FC11B",
+    "91": "5FC11C",
+    "92": "5FC11D",
+    "93": "5FC11E",
+    "94": "5FC11F",
+    "95": "5FC120",
+}
+
 @piv.command()
 @click.pass_obj
 @click.option(
@@ -57,7 +85,7 @@ def admin_auth(ctx: Context, admin_key: str) -> None:
 )
 @click.option(
     "--key",
-    type = click.Choice(["9A"," 9C"," 9D"," 9E"," 82"," 83"," 84"," 85"," 86"," 87"," 88"," 89"," 8A"," 8B"," 8C"," 8D"," 8E"," 8F"," 90"," 91"," 92"," 93"," 94"," 95"]),
+    type = click.Choice(["9A", "9C", "9D", "9E", "82", "83", "84", "85", "86", "87", "88", "89", "8A", "8B", "8C", "8D", "8E", "8F", "90", "91", "92", "93", "94", "95"]), 
     default="9A",
 )
 @click.option(
@@ -76,7 +104,12 @@ def admin_auth(ctx: Context, admin_key: str) -> None:
     prompt = "Enter the PIN",
     hide_input = True,
 )
-def generate_key(ctx: Context, admin_key: str, key: str, algo: str, subject_name: str, pin: str) -> None:
+@click.option(
+    "--out-file",
+    type = click.Path(allow_dash = True),
+    default = "-",
+)
+def generate_key(ctx: Context, admin_key: str, key: str, algo: str, subject_name: str, pin: str, out_file: str) -> None:
     try:
         admin_key: bytes = bytearray.fromhex(admin_key)
     except:
@@ -157,7 +190,55 @@ def generate_key(ctx: Context, admin_key: str, key: str, algo: str, subject_name
             },
             'signature': signature
         })
-        
-        with open("/tmp/eiantuneiu.csr", "wb") as file:
+
+        with click.open_file(out_file, mode = "w") as file:
             file.write(csr.dump())
 
+@piv.command()
+@click.pass_obj
+@click.argument(
+    "admin-key",
+    type = click.STRING, 
+    default="010203040506070801020304050607080102030405060708",
+)
+@click.option(
+    "--format",
+    type = click.Choice(["DER", "PEM"]),
+    default = "PEM"
+)
+@click.option(
+    "--key",
+    type = click.Choice(["9A"," 9C"," 9D"," 9E"," 82"," 83"," 84"," 85"," 86"," 87"," 88"," 89"," 8A"," 8B"," 8C"," 8D"," 8E"," 8F"," 90"," 91"," 92"," 93"," 94"," 95"]),
+    default="9A",
+)
+@click.option(
+    "--path",
+    type = click.Path(allow_dash = True),
+    default = "-",
+)
+def write_certificate(ctx: Context, admin_key: str, format: str, key: str, path: str) -> None:
+    try:
+        admin_key: bytes = bytearray.fromhex(admin_key)
+    except:
+        local_critical(
+            "Key is expected to be an hexadecimal string",
+            support_hint=False,
+        )
+
+    with ctx.connect_device() as device:
+        device = PivApp(device)
+        device.authenticate_admin(admin_key)
+        local_print("Authenticated successfully")
+
+        with click.open_file(path, mode = 'rb') as f:
+            cert_bytes = f.read()
+        if format == "DER":
+            cert = cryptography.x509.load_der_x509_certificate(cert_bytes)
+        elif format == "PEM":
+            cert = cryptography.x509.load_pem_x509_certificate(cert_bytes)
+        cert_serialized = cert.public_bytes(Encoding.DER)
+
+        payload = Tlv.build({0x5C: bytes(bytearray.fromhex(KEY_TO_CERT_OBJ_ID_MAP[key])), 0x53: cert_serialized})
+
+        device.send_receive(0xDB, 0x3F, 0xFF, payload)
+    pass

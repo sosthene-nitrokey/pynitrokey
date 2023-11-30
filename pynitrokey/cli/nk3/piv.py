@@ -114,13 +114,13 @@ def generate_key(ctx: Context, admin_key: str, key: str, algo: str, subject_name
             key = find_by_id(0x86, data)[1:]
             public_x = int.from_bytes(key[:32], byteorder='big', signed=False)
             public_y = int.from_bytes(key[32:], byteorder='big', signed=False)
-            print()
             public_numbers = ec.EllipticCurvePublicNumbers(public_x,public_y, cryptography.hazmat.primitives.asymmetric.ec.SECP256R1())
             public_key = public_numbers.public_key()
             public_key_der = public_key.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
         elif algo == "rsa2048":
-            modulus = int.from_bytes(find_by_id(0x81), byteorder="big", signed=False)
-            public_numbers = rsa.RSAPublicNumbers(65537, modulus)
+            modulus = int.from_bytes(find_by_id(0x81, data), byteorder="big", signed=False)
+            exponent = int.from_bytes(find_by_id(0x82, data), byteorder="big", signed=False)
+            public_numbers = rsa.RSAPublicNumbers(exponent, modulus)
             public_key = public_numbers.public_key()
             public_key_der = public_key.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
         else:
@@ -158,5 +158,6 @@ def generate_key(ctx: Context, admin_key: str, key: str, algo: str, subject_name
             'signature': signature
         })
         
-        sys.stdout.buffer.write(csr.dump())
+        with open("/tmp/eiantuneiu.csr", "wb") as file:
+            file.write(csr.dump())
 

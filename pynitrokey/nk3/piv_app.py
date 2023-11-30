@@ -19,6 +19,19 @@ def find_by_id(tag: int, data: Sequence[tuple[int, bytes]]) -> Optional[bytes]:
         if t == tag:
             return b
 
+# size is in bytes
+def prepare_for_pkcs1v15_sign_2048(data: bytes) -> bytes:
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(data)
+    hashed = digest.finalize()
+
+    prefix = bytearray.fromhex("3031300d060960864801650304020105000420")
+    padding_len = 256 - 32 - 19 - 3
+    padding = b'\x00\x01' + (b'\xFF' * padding_len) + b'\x00'
+    total = padding + prefix + hashed
+    assert len(total) == 256
+    return total
+
 class PivApp:
     log: logging.Logger
     logfn: LogFn
@@ -156,15 +169,15 @@ class PivApp:
 
 
     def sign_p256(self, data: bytes, key: int) -> bytes:
+        prepare_for_pkcs1v15_sign_2048(data)
         digest = hashes.Hash(hashes.SHA256())
         digest.update(data)
         payload = digest.finalize()
         return self.raw_sign(payload, key, 0x11)
-        local_critical("Unimplemented")
 
-    def sign_rsa2048(self, data: bytes) -> bytes:
-        local_critical("Unimplemented")
-        pass
+    def sign_rsa2048(self, data: bytes, key: int) -> bytes:
+        payload = prepare_for_pkcs1v15_sign_2048(data)
+        return self.raw_sign(payload, key, 0x07)
 
     def raw_sign(self, payload: bytes, key: int, algo: int) -> bytes:
         body = Tlv.build({0x7C: {0x81: payload, 0x82: b''}})

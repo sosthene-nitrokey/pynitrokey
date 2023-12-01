@@ -1,23 +1,24 @@
 import logging
 import os
 import typing
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import hashes
+from typing import Any, Callable, List, Optional, Sequence, Union
+
 from ber_tlv.tlv import Tlv
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from typing import Callable, List, Optional, Any, Sequence, Union
-
-
+from pynitrokey.helpers import local_critical, local_print
 from pynitrokey.nk3.device import Nitrokey3Device
 from pynitrokey.start.gnuk_token import iso7816_compose
-from pynitrokey.helpers import local_critical, local_print
 
 LogFn = Callable[[str], Any]
+
 
 def find_by_id(tag: int, data: Sequence[tuple[int, bytes]]) -> Optional[bytes]:
     for t, b in data:
         if t == tag:
             return b
+
 
 # size is in bytes
 def prepare_for_pkcs1v15_sign_2048(data: bytes) -> bytes:
@@ -27,10 +28,11 @@ def prepare_for_pkcs1v15_sign_2048(data: bytes) -> bytes:
 
     prefix = bytearray.fromhex("3031300d060960864801650304020105000420")
     padding_len = 256 - 32 - 19 - 3
-    padding = b'\x00\x01' + (b'\xFF' * padding_len) + b'\x00'
+    padding = b"\x00\x01" + (b"\xFF" * padding_len) + b"\x00"
     total = padding + prefix + hashed
     assert len(total) == 256
     return total
+
 
 class PivApp:
     log: logging.Logger
@@ -44,6 +46,7 @@ class PivApp:
         else:
             self.logfn = self.log.info
         self.dev = dev
+
     def send_receive(
         self,
         ins: int,
@@ -66,7 +69,7 @@ class PivApp:
             raise
 
         l = len(result)
-        result, status_bytes = result[:l-2], result[l-2:]
+        result, status_bytes = result[: l - 2], result[l - 2 :]
         self.logfn(
             f"Received [{status_bytes.hex()}] {result.hex() if result else result!r}"
         )
@@ -91,7 +94,7 @@ class PivApp:
                 raise
             # Data order is different here than in APDU - SW is first, then the data if any
             l = len(result)
-            result, status_bytes = result[:l-2], result[l-2:]
+            result, status_bytes = result[: l - 2], result[l - 2 :]
             self.logfn(
                 f"Received [{status_bytes.hex()}] {result.hex() if result else result!r}"
             )
@@ -108,17 +111,15 @@ class PivApp:
 
         if data_final:
             try:
-                self.logfn(
-                    f"Decoded received: {data_final.hex()}"
-                )
+                self.logfn(f"Decoded received: {data_final.hex()}")
             except Exception:
                 pass
 
         return bytes(data_final)
 
     def authenticate_admin(self, admin_key: bytes) -> None:
-        
-        if len(admin_key) ==  24:
+
+        if len(admin_key) == 24:
             algorithm = algorithms.TripleDES(admin_key)
             algo = "tdes"
             algo_byte = 0x03
@@ -139,14 +140,19 @@ class PivApp:
                 support_hint=False,
             )
 
-        challenge_body = Tlv.build({0x7C: {0x80: b''}})
+        challenge_body = Tlv.build({0x7C: {0x80: b""}})
         challenge_response = self.send_receive(0x87, algo_byte, 0x9B, challenge_body)
-        challenge = find_by_id(0x80, Tlv.parse(find_by_id(0x7C, Tlv.parse(challenge_response, recursive = False)), recursive = False))
+        challenge = find_by_id(
+            0x80,
+            Tlv.parse(
+                find_by_id(0x7C, Tlv.parse(challenge_response, recursive=False)),
+                recursive=False,
+            ),
+        )
 
         # challenge = decoded.first_by_id(0x7C).data.first_by_id(0x80).data
         if len(challenge) != expected_len:
             local_critical("Got unexpected authentication challenge length")
-            
 
         our_challenge = os.urandom(expected_len)
         cipher = Cipher(algorithm, mode=modes.ECB())
@@ -154,19 +160,28 @@ class PivApp:
         decryptor = cipher.decryptor()
         response = encryptor.update(challenge) + encryptor.finalize()
         our_challenge_encrypted = decryptor.update(our_challenge) + decryptor.finalize()
-        response_body = Tlv.build({0x7C: {0x80: response, 0x81: our_challenge_encrypted}})
+        response_body = Tlv.build(
+            {0x7C: {0x80: response, 0x81: our_challenge_encrypted}}
+        )
 
         final_response = self.send_receive(0x87, algo_byte, 0x9B, response_body)
-        decoded_challenge = find_by_id(0x82, Tlv.parse(find_by_id(0x7C, Tlv.parse(final_response, recursive = False)), recursive = False))
+        decoded_challenge = find_by_id(
+            0x82,
+            Tlv.parse(
+                find_by_id(0x7C, Tlv.parse(final_response, recursive=False)),
+                recursive=False,
+            ),
+        )
 
         if decoded_challenge != our_challenge:
-            local_critical("Failed to authenticate with administrator key", support_hint=False)
+            local_critical(
+                "Failed to authenticate with administrator key", support_hint=False
+            )
 
     def login(self, pin: str):
-        body = pin.encode('utf-8')
+        body = pin.encode("utf-8")
         body += bytes([0xFF for i in range(8 - len(body))])
         self.send_receive(0x20, 0x00, 0x80, body)
-
 
     def sign_p256(self, data: bytes, key: int) -> bytes:
         prepare_for_pkcs1v15_sign_2048(data)
@@ -180,6 +195,11 @@ class PivApp:
         return self.raw_sign(payload, key, 0x07)
 
     def raw_sign(self, payload: bytes, key: int, algo: int) -> bytes:
-        body = Tlv.build({0x7C: {0x81: payload, 0x82: b''}})
+        body = Tlv.build({0x7C: {0x81: payload, 0x82: b""}})
         result = self.send_receive(0x87, algo, key, body)
-        return find_by_id(0x82, Tlv.parse(find_by_id(0x7C, Tlv.parse(result, recursive = False)), recursive = False))
+        return find_by_id(
+            0x82,
+            Tlv.parse(
+                find_by_id(0x7C, Tlv.parse(result, recursive=False)), recursive=False
+            ),
+        )

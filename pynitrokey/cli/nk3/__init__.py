@@ -739,3 +739,4 @@ def provision_fido2(ctx: Context, key_file: BinaryIO, cert_file: BinaryIO) -> No
 # Import "secrets" subcommand from the secrets module
 from . import piv  # noqa: F401,E402
 from . import secrets  # noqa: F401,E402
+from . import piv  # noqa: F401,E402

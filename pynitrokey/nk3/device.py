@@ -130,9 +130,6 @@ class Nitrokey3Device(Nitrokey3Base):
     def otp(self, data: bytes = b"") -> bytes:
         return self._call(Command.OTP, data=data)
 
-    def piv(self, data: bytes = b"") -> bytes:
-        return self._call(Command.PIV, data=data)
-
     def is_locked(self) -> bool:
         response = self._call(Command.LOCKED, response_len=1)
         return response[0] == 1

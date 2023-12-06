@@ -11,6 +11,10 @@ from pynitrokey.helpers import local_critical, local_print
 from pynitrokey.nk3.device import Nitrokey3Device
 from pynitrokey.start.gnuk_token import iso7816_compose
 
+from smartcard.CardType import ATRCardType
+from smartcard.CardRequest import CardRequest
+from smartcard.CardService import CardService
+
 LogFn = Callable[[str], Any]
 
 
@@ -38,14 +42,21 @@ class PivApp:
     log: logging.Logger
     logfn: LogFn
     dev: Nitrokey3Device
+    card: CardService
 
     def __init__(self, dev: Nitrokey3Device, logfn: Optional[LogFn] = None):
-        self.log = logging.getLogger("otpapp")
+        self.log = logging.getLogger("pivapp")
+        atr = bytes([0x3B, 0x8F, 0x01, 0x80, 0x5D, 0x4E, 0x69, 0x74, 0x72, 0x6F, 0x6B, 0x65, 0x79, 0x00, 0x00, 0x00, 0x00, 0x00, 0x6A])
+        cardrequest = CardRequest(timeout=1, cardType=ATRCardType(atr))
+        self.cardservice = cardrequest.waitforcard() 
+        self.cardservice.connection.connect()
+        self.cardservice.connection.transmit(list(iso7816_compose(0xA4, 0x04, 0x00, bytes([0xA0, 0x00, 0x00, 0x03, 0x08, 0x00, 0x00, 0x10, 0x00, 0x01, 0x00]))))
         if logfn is not None:
             self.logfn = logfn
         else:
             self.logfn = self.log.info
         self.dev = dev
+
 
     def send_receive(
         self,
@@ -63,19 +74,19 @@ class PivApp:
         )
 
         try:
-            result = self.dev.piv(data=data)
+            result, sw1, sw2 = self.cardservice.connection.transmit(list(data))
         except Exception as e:
             self.logfn(f"Got exception: {e}")
             raise
 
         l = len(result)
-        result, status_bytes = result[: l - 2], result[l - 2 :]
+        status_bytes = bytes([sw1, sw2])
         self.logfn(
             f"Received [{status_bytes.hex()}] {result.hex() if result else result!r}"
         )
 
         log_multipacket = False
-        data_final = result
+        data_final = bytes(result)
         MORE_DATA_STATUS_BYTE = 0x61
         while status_bytes[0] == MORE_DATA_STATUS_BYTE:
             if log_multipacket:
@@ -83,23 +94,23 @@ class PivApp:
                     f"Got RemainingData status: [{status_bytes.hex()}] {result.hex() if result else result!r}"
                 )
             log_multipacket = True
-            ins = 0xA5
+            ins = 0xC0
             p1 = 0
             p2 = 0
-            bytes_data = iso7816_compose(ins, p1, p2)
+            bytes_data = iso7816_compose(ins, p1, p2, le = sw2)
             try:
-                result = self.dev.piv(data=bytes_data)
+                result, sw1, sw2 = self.cardservice.connection.transmit(list(bytes_data))
             except Exception as e:
                 self.logfn(f"Got exception: {e}")
                 raise
             # Data order is different here than in APDU - SW is first, then the data if any
             l = len(result)
-            result, status_bytes = result[: l - 2], result[l - 2 :]
+            status_bytes = bytes([sw1, sw2])
             self.logfn(
-                f"Received [{status_bytes.hex()}] {result.hex() if result else result!r}"
+                f"Received [{status_bytes.hex()}] {bytes(result).hex() if result else result!r}"
             )
             if status_bytes[0] in [0x90, MORE_DATA_STATUS_BYTE]:
-                data_final += result
+                data_final += bytes(result)
 
         if status_bytes != b"\x90\x00" and status_bytes[0] != MORE_DATA_STATUS_BYTE:
             raise ValueError(f"{status_bytes.hex()}, Received error")
@@ -115,7 +126,7 @@ class PivApp:
             except Exception:
                 pass
 
-        return bytes(data_final)
+        return data_final
 
     def authenticate_admin(self, admin_key: bytes) -> None:
 

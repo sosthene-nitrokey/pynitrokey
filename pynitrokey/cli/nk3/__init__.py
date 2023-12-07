@@ -50,6 +50,13 @@ logger = logging.getLogger(__name__)
 class Context:
     def __init__(self, path: Optional[str]) -> None:
         self.path = path
+        self.showed_windows_warning = False
+
+    def show_windows_warning():
+        if self.showed_windows_warning:
+            return
+        self.showed_windows_warning = True
+        require_windows_admin()
 
     def list(self) -> List[Nitrokey3Base]:
         if self.path:
@@ -131,7 +138,6 @@ class Context:
 def nk3(ctx: click.Context, path: Optional[str]) -> None:
     """Interact with Nitrokey 3 devices, see subcommands."""
     ctx.obj = Context(path)
-    require_windows_admin()
 
 
 @nk3.command()

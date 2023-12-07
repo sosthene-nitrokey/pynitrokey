@@ -46,8 +46,6 @@ def admin_auth(admin_key: str) -> None:
     device.authenticate_admin(admin_key)
     local_print("Authenticated successfully")
 
-    pass
-
 
 KEY_TO_CERT_OBJ_ID_MAP = {
     "9A": "5FC105",
@@ -348,7 +346,6 @@ def write_certificate(
 
     device = PivApp()
     device.authenticate_admin(admin_key)
-    local_print("Authenticated successfully")
 
     with click.open_file(path, mode="rb") as f:
         cert_bytes = f.read()

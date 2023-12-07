@@ -41,10 +41,9 @@ def prepare_for_pkcs1v15_sign_2048(data: bytes) -> bytes:
 class PivApp:
     log: logging.Logger
     logfn: LogFn
-    dev: Nitrokey3Device
     card: CardService
 
-    def __init__(self, dev: Nitrokey3Device, logfn: Optional[LogFn] = None):
+    def __init__(self, logfn: Optional[LogFn] = None):
         self.log = logging.getLogger("pivapp")
         atr = bytes([0x3B, 0x8F, 0x01, 0x80, 0x5D, 0x4E, 0x69, 0x74, 0x72, 0x6F, 0x6B, 0x65, 0x79, 0x00, 0x00, 0x00, 0x00, 0x00, 0x6A])
         cardrequest = CardRequest(timeout=1, cardType=ATRCardType(atr))
@@ -55,7 +54,6 @@ class PivApp:
             self.logfn = logfn
         else:
             self.logfn = self.log.info
-        self.dev = dev
 
 
     def send_receive(

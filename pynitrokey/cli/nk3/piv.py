@@ -16,26 +16,24 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.primitives.serialization import Encoding
 
-from pynitrokey.cli.nk3 import Context, nk3
+from pynitrokey.cli.nk3 import nk3
 from pynitrokey.helpers import local_critical, local_print
 from pynitrokey.nk3.piv_app import PivApp, find_by_id
 
 
 @nk3.group(cls=ClickAliasedGroup)
-@click.pass_context
-def piv(ctx: click.Context) -> None:
+def piv() -> None:
     """Nitrokey PIV App"""
     pass
 
 
 @piv.command()
-@click.pass_obj
 @click.argument(
     "admin-key",
     type=click.STRING,
     default="010203040506070801020304050607080102030405060708",
 )
-def admin_auth(ctx: Context, admin_key: str) -> None:
+def admin_auth(admin_key: str) -> None:
     try:
         admin_key: bytes = bytearray.fromhex(admin_key)
     except:
@@ -44,10 +42,9 @@ def admin_auth(ctx: Context, admin_key: str) -> None:
             support_hint=False,
         )
 
-    with ctx.connect_device() as device:
-        device = PivApp(device)
-        device.authenticate_admin(admin_key)
-        local_print("Authenticated successfully")
+    device = PivApp()
+    device.authenticate_admin(admin_key)
+    local_print("Authenticated successfully")
 
     pass
 
@@ -81,7 +78,6 @@ KEY_TO_CERT_OBJ_ID_MAP = {
 
 
 @piv.command()
-@click.pass_obj
 @click.option(
     "--admin-key",
     type=click.STRING,
@@ -146,7 +142,6 @@ KEY_TO_CERT_OBJ_ID_MAP = {
     default="-",
 )
 def generate_key(
-    ctx: Context,
     admin_key: str,
     key: str,
     algo: str,
@@ -164,141 +159,139 @@ def generate_key(
         )
     key_ref = int(key, 16)
 
-    with ctx.connect_device() as device:
-        device = PivApp(device)
-        device.authenticate_admin(admin_key)
-        device.login(pin)
+    device = PivApp()
+    device.authenticate_admin(admin_key)
+    device.login(pin)
 
-        if algo == "rsa2048":
-            algo_id = b"\x07"
-            signature_algorithm = "sha256_rsa"
-        elif algo == "nistp256":
-            algo_id = b"\x11"
-            signature_algorithm = "sha256_ecdsa"
-        else:
-            local_critical("Unimplemented algorithm", support_hint=False)
+    if algo == "rsa2048":
+        algo_id = b"\x07"
+        signature_algorithm = "sha256_rsa"
+    elif algo == "nistp256":
+        algo_id = b"\x11"
+        signature_algorithm = "sha256_ecdsa"
+    else:
+        local_critical("Unimplemented algorithm", support_hint=False)
 
-        body = Tlv.build({0xAC: {0x80: algo_id}})
-        ins = 0x47
-        p1 = 0
-        p2 = key_ref
-        response = device.send_receive(ins, p1, p2, body)
+    body = Tlv.build({0xAC: {0x80: algo_id}})
+    ins = 0x47
+    p1 = 0
+    p2 = key_ref
+    response = device.send_receive(ins, p1, p2, body)
 
-        data = Tlv.parse(response, recursive=False)
-        data = Tlv.parse(find_by_id(0x7F49, data), recursive=False)
+    data = Tlv.parse(response, recursive=False)
+    data = Tlv.parse(find_by_id(0x7F49, data), recursive=False)
 
-        if algo == "nistp256":
-            key = find_by_id(0x86, data)[1:]
-            public_x = int.from_bytes(key[:32], byteorder="big", signed=False)
-            public_y = int.from_bytes(key[32:], byteorder="big", signed=False)
-            public_numbers = ec.EllipticCurvePublicNumbers(
-                public_x,
-                public_y,
-                cryptography.hazmat.primitives.asymmetric.ec.SECP256R1(),
+    if algo == "nistp256":
+        key = find_by_id(0x86, data)[1:]
+        public_x = int.from_bytes(key[:32], byteorder="big", signed=False)
+        public_y = int.from_bytes(key[32:], byteorder="big", signed=False)
+        public_numbers = ec.EllipticCurvePublicNumbers(
+            public_x,
+            public_y,
+            cryptography.hazmat.primitives.asymmetric.ec.SECP256R1(),
+        )
+        public_key = public_numbers.public_key()
+        public_key_der = public_key.public_bytes(
+            serialization.Encoding.DER,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+    elif algo == "rsa2048":
+        modulus = int.from_bytes(
+            find_by_id(0x81, data), byteorder="big", signed=False
+        )
+        exponent = int.from_bytes(
+            find_by_id(0x82, data), byteorder="big", signed=False
+        )
+        public_numbers = rsa.RSAPublicNumbers(exponent, modulus)
+        public_key = public_numbers.public_key()
+        public_key_der = public_key.public_bytes(
+            serialization.Encoding.DER,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+    else:
+        local_critical("Unimplemented algorithm")
+
+    public_key_info = PublicKeyInfo.load(public_key_der, strict=True)
+
+    if subject_name is None:
+        rdns = []
+    else:
+        rdns = [
+            x509.RelativeDistinguishedName(
+                [
+                    x509.NameTypeAndValue(
+                        {
+                            "type": x509.NameType.map("domain_component"),
+                            "value": x509.DNSName(subject),
+                        }
+                    )
+                ]
             )
-            public_key = public_numbers.public_key()
-            public_key_der = public_key.public_bytes(
-                serialization.Encoding.DER,
-                serialization.PublicFormat.SubjectPublicKeyInfo,
+            for subject in domain_component
+        ] + [
+            x509.RelativeDistinguishedName(
+                [
+                    x509.NameTypeAndValue(
+                        {
+                            "type": x509.NameType.map("common_name"),
+                            "value": x509.DirectoryString(
+                                name="utf8_string", value=subject
+                            ),
+                        }
+                    )
+                ]
             )
-        elif algo == "rsa2048":
-            modulus = int.from_bytes(
-                find_by_id(0x81, data), byteorder="big", signed=False
-            )
-            exponent = int.from_bytes(
-                find_by_id(0x82, data), byteorder="big", signed=False
-            )
-            public_numbers = rsa.RSAPublicNumbers(exponent, modulus)
-            public_key = public_numbers.public_key()
-            public_key_der = public_key.public_bytes(
-                serialization.Encoding.DER,
-                serialization.PublicFormat.SubjectPublicKeyInfo,
-            )
-        else:
-            local_critical("Unimplemented algorithm")
-
-        public_key_info = PublicKeyInfo.load(public_key_der, strict=True)
-
-        if subject_name is None:
-            rdns = []
-        else:
-            rdns = [
-                x509.RelativeDistinguishedName(
-                    [
-                        x509.NameTypeAndValue(
-                            {
-                                "type": x509.NameType.map("domain_component"),
-                                "value": x509.DNSName(subject),
-                            }
-                        )
-                    ]
-                )
-                for subject in domain_component
-            ] + [
-                x509.RelativeDistinguishedName(
-                    [
-                        x509.NameTypeAndValue(
-                            {
-                                "type": x509.NameType.map("common_name"),
-                                "value": x509.DirectoryString(
-                                    name="utf8_string", value=subject
-                                ),
-                            }
-                        )
-                    ]
-                )
-                for subject in subject_name
-            ]
-
-        extensions = [
-            {
-                "extn_id": "key_usage",
-                "critical": True,
-                "extn_value": x509.KeyUsage({"digital_signature", "non_repudiation"}),
-            },
-            {
-                "extn_id": "extended_key_usage",
-                "critical": False,
-                "extn_value": x509.ExtKeyUsageSyntax(["microsoft_smart_card_logon"]),
-            },
+            for subject in subject_name
         ]
 
-        csr_info = CertificationRequestInfo(
-            {
-                "version": "v1",
-                "subject": x509.Name(name="", value=x509.RDNSequence(rdns)),
-                "subject_pk_info": public_key_info,
-                "attributes": [{"type": "extension_request", "values": [extensions]}],
-            }
-        )
+    extensions = [
+        {
+            "extn_id": "key_usage",
+            "critical": True,
+            "extn_value": x509.KeyUsage({"digital_signature", "non_repudiation"}),
+        },
+        {
+            "extn_id": "extended_key_usage",
+            "critical": False,
+            "extn_value": x509.ExtKeyUsageSyntax(["microsoft_smart_card_logon"]),
+        },
+    ]
+
+    csr_info = CertificationRequestInfo(
+        {
+            "version": "v1",
+            "subject": x509.Name(name="", value=x509.RDNSequence(rdns)),
+            "subject_pk_info": public_key_info,
+            "attributes": [{"type": "extension_request", "values": [extensions]}],
+        }
+    )
 
 
-        # To Be Signed
-        tbs = csr_info.dump()
+    # To Be Signed
+    tbs = csr_info.dump()
 
-        if algo == "nistp256":
-            signature = device.sign_p256(tbs, key_ref)
-        elif algo == "rsa2048":
-            signature = device.sign_rsa2048(tbs, key_ref)
-        else:
-            local_critical("Unimplemented algorithm")
+    if algo == "nistp256":
+        signature = device.sign_p256(tbs, key_ref)
+    elif algo == "rsa2048":
+        signature = device.sign_rsa2048(tbs, key_ref)
+    else:
+        local_critical("Unimplemented algorithm")
 
-        csr = CertificationRequest(
-            {
-                "certification_request_info": csr_info,
-                "signature_algorithm": {
-                    "algorithm": signature_algorithm,
-                },
-                "signature": signature,
-            }
-        )
+    csr = CertificationRequest(
+        {
+            "certification_request_info": csr_info,
+            "signature_algorithm": {
+                "algorithm": signature_algorithm,
+            },
+            "signature": signature,
+        }
+    )
 
-        with click.open_file(out_file, mode="wb") as file:
-            file.write(csr.dump())
+    with click.open_file(out_file, mode="wb") as file:
+        file.write(csr.dump())
 
 
 @piv.command()
-@click.pass_obj
 @click.argument(
     "admin-key",
     type=click.STRING,
@@ -343,7 +336,7 @@ def generate_key(
     default="-",
 )
 def write_certificate(
-    ctx: Context, admin_key: str, format: str, key: str, path: str
+    admin_key: str, format: str, key: str, path: str
 ) -> None:
     try:
         admin_key: bytes = bytearray.fromhex(admin_key)
@@ -353,25 +346,23 @@ def write_certificate(
             support_hint=False,
         )
 
-    with ctx.connect_device() as device:
-        device = PivApp(device)
-        device.authenticate_admin(admin_key)
-        local_print("Authenticated successfully")
+    device = PivApp()
+    device.authenticate_admin(admin_key)
+    local_print("Authenticated successfully")
 
-        with click.open_file(path, mode="rb") as f:
-            cert_bytes = f.read()
-        if format == "DER":
-            cert = cryptography.x509.load_der_x509_certificate(cert_bytes)
-        elif format == "PEM":
-            cert = cryptography.x509.load_pem_x509_certificate(cert_bytes)
-        cert_serialized = cert.public_bytes(Encoding.DER)
+    with click.open_file(path, mode="rb") as f:
+        cert_bytes = f.read()
+    if format == "DER":
+        cert = cryptography.x509.load_der_x509_certificate(cert_bytes)
+    elif format == "PEM":
+        cert = cryptography.x509.load_pem_x509_certificate(cert_bytes)
+    cert_serialized = cert.public_bytes(Encoding.DER)
 
-        payload = Tlv.build(
-            {
-                0x5C: bytes(bytearray.fromhex(KEY_TO_CERT_OBJ_ID_MAP[key])),
-                0x53: cert_serialized,
-            }
-        )
+    payload = Tlv.build(
+        {
+            0x5C: bytes(bytearray.fromhex(KEY_TO_CERT_OBJ_ID_MAP[key])),
+            0x53: cert_serialized,
+        }
+    )
 
-        device.send_receive(0xDB, 0x3F, 0xFF, payload)
-    pass
+    device.send_receive(0xDB, 0x3F, 0xFF, payload)

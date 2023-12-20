@@ -250,10 +250,27 @@ class PivApp:
         data = bytes([algo_byte, 0x9B, len(new_key)]) + new_key
         self.send_receive(0xFF, 0xFF, 0xFE, data)
 
-    def login(self, pin: str):
+    def encode_pin(pin: str) -> bytes:
+        if len(pin) > 8:
+            local_critical("PIN can only be up to 8 bytes long", support_hint=False)
+
         body = pin.encode("utf-8")
         body += bytes([0xFF for i in range(8 - len(body))])
+        body
+
+    def login(self, pin: str):
+        body = self.encode_pin(pin)
         self.send_receive(0x20, 0x00, 0x80, body)
+
+    def change_pin(self, old_pin: str, new_pin: str):
+        body = self.encode_pin(old_pin) + self.encode_pin(new_pin)
+        self.send_receive(0x24, 0, 0x80, body)
+
+    def change_puk(self, old_puk: str, new_puk: str):
+        if len(old_puk) != 8 or len(new_puk) != 8:
+            local_critical("PUK must be 8 bytes long", support_hint=False)
+        body = old_puk.encode("utf-8") + new_puk.encode("utf-8")
+        self.send_receive(0x24, 0, 0x81, body)
 
     def sign_p256(self, data: bytes, key: int) -> bytes:
         prepare_for_pkcs1v15_sign_2048(data)

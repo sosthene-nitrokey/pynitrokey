@@ -73,6 +73,44 @@ def change_admin_key(current_admin_key: str, new_admin_key: str) -> None:
     local_print("Changed key successfully")
 
 
+@piv.command()
+@click.option(
+    "--current-pin",
+    type=click.STRING,
+    prompt="Enter the PIN",
+    hide_input=True,
+)
+@click.option(
+    "--new-pin",
+    type=click.STRING,
+    prompt="Enter the PIN",
+    hide_input=True,
+)
+def change_pin(current_pin: str, new_pin: str) -> None:
+    device = PivApp()
+    device.change_pin(current_pin, new_pin)
+    local_print("Changed pin successfully")
+
+
+@piv.command()
+@click.option(
+    "--current-puk",
+    type=click.STRING,
+    prompt="Enter the PUK",
+    hide_input=True,
+)
+@click.option(
+    "--new-puk",
+    type=click.STRING,
+    prompt="Enter the PUK",
+    hide_input=True,
+)
+def change_puk(current_puk: str, new_puk: str) -> None:
+    device = PivApp()
+    device.change_puk(current_puk, new_puk)
+    local_print("Changed puk successfully")
+
+
 KEY_TO_CERT_OBJ_ID_MAP = {
     "9A": "5FC105",
     "9C": "5FC10A",

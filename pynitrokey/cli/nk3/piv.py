@@ -111,6 +111,19 @@ def change_puk(current_puk: str, new_puk: str) -> None:
     local_print("Changed puk successfully")
 
 
+@piv.command()
+def factory_reset() -> None:
+    device = PivApp()
+    try:
+        device.factory_reset()
+    except:
+        local_critical(
+            "Factory reset could not be performed. You first need to lock the PIN with 3 failed attempts",
+            support_hint=False,
+        )
+    local_print("Factory reset successfully")
+
+
 KEY_TO_CERT_OBJ_ID_MAP = {
     "9A": "5FC105",
     "9C": "5FC10A",

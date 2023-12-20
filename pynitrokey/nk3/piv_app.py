@@ -272,6 +272,9 @@ class PivApp:
         body = old_puk.encode("utf-8") + new_puk.encode("utf-8")
         self.send_receive(0x24, 0, 0x81, body)
 
+    def factory_reset(self):
+        self.send_receive(0xFB, 0, 0)
+
     def sign_p256(self, data: bytes, key: int) -> bytes:
         prepare_for_pkcs1v15_sign_2048(data)
         digest = hashes.Hash(hashes.SHA256())

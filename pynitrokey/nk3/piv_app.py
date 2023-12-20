@@ -187,6 +187,25 @@ class PivApp:
                 "Failed to authenticate with administrator key", support_hint=False
             )
 
+    def set_admin_key(self, new_key: bytes) -> None:
+        if len(new_key) == 24:
+            algo = "tdes"
+            algo_byte = 0x03
+        elif len(new_key) == 16:
+            algo = "aes128"
+            algo_byte = 0x08
+        elif len(new_key) == 32:
+            algo = "aes256"
+            algo_byte = 0x0C
+        else:
+            local_critical(
+                "Unsupported key length",
+                support_hint=False,
+            )
+        data = bytes([algo_byte, 0x9B, len(new_key)]) + new_key
+        self.send_receive(0xFF, 0xFF, 0xFE, data)
+
+
     def login(self, pin: str):
         body = pin.encode("utf-8")
         body += bytes([0xFF for i in range(8 - len(body))])

@@ -46,6 +46,31 @@ def admin_auth(admin_key: str) -> None:
     device.authenticate_admin(admin_key)
     local_print("Authenticated successfully")
 
+@piv.command()
+@click.option(
+    "--current-admin-key",
+    type=click.STRING,
+    default="010203040506070801020304050607080102030405060708",
+)
+@click.argument(
+    "new-admin-key",
+    type=click.STRING,
+)
+def change_admin_key(current_admin_key: str, new_admin_key: str) -> None:
+    try:
+        current_admin_key: bytes = bytearray.fromhex(current_admin_key)
+        new_admin_key: bytes = bytearray.fromhex(new_admin_key)
+    except:
+        local_critical(
+            "Key is expected to be an hexadecimal string",
+            support_hint=False,
+        )
+
+    device = PivApp()
+    device.authenticate_admin(current_admin_key)
+    device.set_admin_key(new_admin_key)
+    local_print("Changed key successfully")
+
 
 KEY_TO_CERT_OBJ_ID_MAP = {
     "9A": "5FC105",

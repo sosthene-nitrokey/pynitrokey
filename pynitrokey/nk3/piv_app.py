@@ -250,13 +250,13 @@ class PivApp:
         data = bytes([algo_byte, 0x9B, len(new_key)]) + new_key
         self.send_receive(0xFF, 0xFF, 0xFE, data)
 
-    def encode_pin(pin: str) -> bytes:
-        if len(pin) > 8:
+    def encode_pin(self, pin: str) -> bytes:
+        body = pin.encode("utf-8")
+        if len(body) > 8:
             local_critical("PIN can only be up to 8 bytes long", support_hint=False)
 
-        body = pin.encode("utf-8")
         body += bytes([0xFF for i in range(8 - len(body))])
-        body
+        return body
 
     def login(self, pin: str):
         body = self.encode_pin(pin)
@@ -267,10 +267,21 @@ class PivApp:
         self.send_receive(0x24, 0, 0x80, body)
 
     def change_puk(self, old_puk: str, new_puk: str):
+        old_puk = old_puk.encode("utf-8")
+        new_puk = new_puk.encode("utf-8")
         if len(old_puk) != 8 or len(new_puk) != 8:
             local_critical("PUK must be 8 bytes long", support_hint=False)
-        body = old_puk.encode("utf-8") + new_puk.encode("utf-8")
+        body = old_puk + new_puk
         self.send_receive(0x24, 0, 0x81, body)
+
+    def reset_retry_counter(self, puk, new_pin):
+        puk = puk.encode("utf-8")
+
+        if len(puk) != 8:
+            local_critical("PUK must be 8 bytes long", support_hint=False)
+
+        body = puk + self.encode_pin(new_pin)
+        self.send_receive(0x2C, 0, 0x80, body)
 
     def factory_reset(self):
         self.send_receive(0xFB, 0, 0)

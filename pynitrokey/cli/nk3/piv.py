@@ -96,19 +96,38 @@ def change_pin(current_pin: str, new_pin: str) -> None:
 @click.option(
     "--current-puk",
     type=click.STRING,
-    prompt="Enter the PUK",
+    prompt="Enter the current PUK",
     hide_input=True,
 )
 @click.option(
     "--new-puk",
     type=click.STRING,
-    prompt="Enter the PUK",
+    prompt="Enter the new PUK",
     hide_input=True,
 )
 def change_puk(current_puk: str, new_puk: str) -> None:
     device = PivApp()
     device.change_puk(current_puk, new_puk)
     local_print("Changed puk successfully")
+
+
+@piv.command()
+@click.option(
+    "--puk",
+    type=click.STRING,
+    prompt="Enter the PUK",
+    hide_input=True,
+)
+@click.option(
+    "--new-pin",
+    type=click.STRING,
+    prompt="Enter the new PIN",
+    hide_input=True,
+)
+def reset_retry_counter(puk: str, new_pin: str):
+    device = PivApp()
+    device.reset_retry_counter(puk, new_pin)
+    local_print("Unlocked PIN successfully")
 
 
 @piv.command()

@@ -6,14 +6,13 @@ from typing import Any, Callable, List, Optional, Sequence, Union
 from ber_tlv.tlv import Tlv
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from smartcard.CardRequest import CardRequest
+from smartcard.CardService import CardService
+from smartcard.CardType import ATRCardType
 
 from pynitrokey.helpers import local_critical, local_print
 from pynitrokey.nk3.device import Nitrokey3Device
 from pynitrokey.start.gnuk_token import iso7816_compose
-
-from smartcard.CardType import ATRCardType
-from smartcard.CardRequest import CardRequest
-from smartcard.CardService import CardService
 
 LogFn = Callable[[str], Any]
 
@@ -45,16 +44,60 @@ class PivApp:
 
     def __init__(self, logfn: Optional[LogFn] = None):
         self.log = logging.getLogger("pivapp")
-        atr = bytes([0x3B, 0x8F, 0x01, 0x80, 0x5D, 0x4E, 0x69, 0x74, 0x72, 0x6F, 0x6B, 0x65, 0x79, 0x00, 0x00, 0x00, 0x00, 0x00, 0x6A])
+        atr = bytes(
+            [
+                0x3B,
+                0x8F,
+                0x01,
+                0x80,
+                0x5D,
+                0x4E,
+                0x69,
+                0x74,
+                0x72,
+                0x6F,
+                0x6B,
+                0x65,
+                0x79,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x6A,
+            ]
+        )
         cardrequest = CardRequest(timeout=1, cardType=ATRCardType(atr))
-        self.cardservice = cardrequest.waitforcard() 
+        self.cardservice = cardrequest.waitforcard()
         self.cardservice.connection.connect()
-        self.cardservice.connection.transmit(list(iso7816_compose(0xA4, 0x04, 0x00, bytes([0xA0, 0x00, 0x00, 0x03, 0x08, 0x00, 0x00, 0x10, 0x00, 0x01, 0x00]))))
+        self.cardservice.connection.transmit(
+            list(
+                iso7816_compose(
+                    0xA4,
+                    0x04,
+                    0x00,
+                    bytes(
+                        [
+                            0xA0,
+                            0x00,
+                            0x00,
+                            0x03,
+                            0x08,
+                            0x00,
+                            0x00,
+                            0x10,
+                            0x00,
+                            0x01,
+                            0x00,
+                        ]
+                    ),
+                )
+            )
+        )
         if logfn is not None:
             self.logfn = logfn
         else:
             self.logfn = self.log.info
-
 
     def send_receive(
         self,
@@ -95,9 +138,11 @@ class PivApp:
             ins = 0xC0
             p1 = 0
             p2 = 0
-            bytes_data = iso7816_compose(ins, p1, p2, le = sw2)
+            bytes_data = iso7816_compose(ins, p1, p2, le=sw2)
             try:
-                result, sw1, sw2 = self.cardservice.connection.transmit(list(bytes_data))
+                result, sw1, sw2 = self.cardservice.connection.transmit(
+                    list(bytes_data)
+                )
             except Exception as e:
                 self.logfn(f"Got exception: {e}")
                 raise
@@ -204,7 +249,6 @@ class PivApp:
             )
         data = bytes([algo_byte, 0x9B, len(new_key)]) + new_key
         self.send_receive(0xFF, 0xFF, 0xFE, data)
-
 
     def login(self, pin: str):
         body = pin.encode("utf-8")

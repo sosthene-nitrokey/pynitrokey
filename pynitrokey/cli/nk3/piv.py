@@ -46,6 +46,7 @@ def admin_auth(admin_key: str) -> None:
     device.authenticate_admin(admin_key)
     local_print("Authenticated successfully")
 
+
 @piv.command()
 @click.option(
     "--current-admin-key",
@@ -219,12 +220,8 @@ def generate_key(
             serialization.PublicFormat.SubjectPublicKeyInfo,
         )
     elif algo == "rsa2048":
-        modulus = int.from_bytes(
-            find_by_id(0x81, data), byteorder="big", signed=False
-        )
-        exponent = int.from_bytes(
-            find_by_id(0x82, data), byteorder="big", signed=False
-        )
+        modulus = int.from_bytes(find_by_id(0x81, data), byteorder="big", signed=False)
+        exponent = int.from_bytes(find_by_id(0x82, data), byteorder="big", signed=False)
         public_numbers = rsa.RSAPublicNumbers(exponent, modulus)
         public_key = public_numbers.public_key()
         public_key_der = public_key.public_bytes(
@@ -288,7 +285,6 @@ def generate_key(
             "attributes": [{"type": "extension_request", "values": [extensions]}],
         }
     )
-
 
     # To Be Signed
     tbs = csr_info.dump()
@@ -358,9 +354,7 @@ def generate_key(
     type=click.Path(allow_dash=True),
     default="-",
 )
-def write_certificate(
-    admin_key: str, format: str, key: str, path: str
-) -> None:
+def write_certificate(admin_key: str, format: str, key: str, path: str) -> None:
     try:
         admin_key: bytes = bytearray.fromhex(admin_key)
     except:

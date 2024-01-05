@@ -9,6 +9,7 @@ from asn1crypto import x509
 from asn1crypto.algos import SignedDigestAlgorithm, SignedDigestAlgorithmId
 from asn1crypto.core import Asn1Value, UTF8String
 from asn1crypto.csr import CertificationRequest, CertificationRequestInfo
+from asn1crypto import csr
 from asn1crypto.keys import PublicKeyInfo
 from ber_tlv.tlv import Tlv
 from click_aliases import ClickAliasedGroup
@@ -225,6 +226,10 @@ KEY_TO_CERT_OBJ_ID_MAP = {
     multiple=True,
 )
 @click.option(
+    "--subject-alt-name-upn",
+    type=click.STRING,
+)
+@click.option(
     "--pin",
     type=click.STRING,
     prompt="Enter the PIN",
@@ -241,6 +246,7 @@ def generate_key(
     algo: str,
     domain_component: Optional[Sequence[str]],
     subject_name: Optional[Sequence[str]],
+    subject_alt_name_upn: Optional[str],
     pin: str,
     out_file: str,
 ) -> None:
@@ -336,6 +342,11 @@ def generate_key(
 
     extensions = [
         {
+            "extn_id": "basic_constraints",
+            "critical": True,
+            "extn_value": x509.BasicConstraints({"ca": False}),
+        },
+        {
             "extn_id": "key_usage",
             "critical": True,
             "extn_value": x509.KeyUsage({"digital_signature", "non_repudiation"}),
@@ -343,9 +354,19 @@ def generate_key(
         {
             "extn_id": "extended_key_usage",
             "critical": False,
-            "extn_value": x509.ExtKeyUsageSyntax(["microsoft_smart_card_logon"]),
+            "extn_value": x509.ExtKeyUsageSyntax(["client_auth", "microsoft_smart_card_logon"]),
         },
     ]
+
+    if subject_alt_name_upn is not None:
+        extensions.append({
+            "extn_id": "subject_alt_name",
+            "critical": False,
+            "extn_value": [x509.GeneralName(
+                "other_name",
+                {"type_id": "1.3.6.1.4.1.311.20.2.3", "value": x509.UTF8String(subject_alt_name_upn).retag({"explicit": 0})}
+            )]
+        })
 
     csr_info = CertificationRequestInfo(
         {

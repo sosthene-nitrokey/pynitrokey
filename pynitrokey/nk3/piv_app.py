@@ -121,9 +121,10 @@ class PivApp:
             raise
 
         l = len(result)
+        result = bytes(result)
         status_bytes = bytes([sw1, sw2])
         self.logfn(
-            f"Received [{status_bytes.hex()}] {result.hex() if result else result!r}"
+            f"Received [{status_bytes.hex()}] {result.hex()}"
         )
 
         log_multipacket = False
@@ -138,7 +139,8 @@ class PivApp:
             ins = 0xC0
             p1 = 0
             p2 = 0
-            bytes_data = iso7816_compose(ins, p1, p2, le=sw2)
+            le = sw2 if sw2 != 0 else 0xFF
+            bytes_data = iso7816_compose(ins, p1, p2, le=le)
             try:
                 result, sw1, sw2 = self.cardservice.connection.transmit(
                     list(bytes_data)
@@ -148,9 +150,10 @@ class PivApp:
                 raise
             # Data order is different here than in APDU - SW is first, then the data if any
             l = len(result)
+            result = bytes(result)
             status_bytes = bytes([sw1, sw2])
             self.logfn(
-                f"Received [{status_bytes.hex()}] {bytes(result).hex() if result else result!r}"
+                f"Received [{status_bytes.hex()}] {bytes(result).hex()}"
             )
             if status_bytes[0] in [0x90, MORE_DATA_STATUS_BYTE]:
                 data_final += bytes(result)

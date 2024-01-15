@@ -433,8 +433,8 @@ def generate_key(
     }).dump()
     payload = Tlv.build(
         {
-            0x5C: bytes(bytearray.fromhex(KEY_TO_CERT_OBJ_ID_MAP[key_hex])),
-            0x53: certificate,
+            0x5C: bytes(bytearray.fromhex(KEY_TO_CERT_OBJ_ID_MAP[key])),
+            0x53: Tlv.build({0x70: certificate, 0x71: bytes([0])}),
         }
     )
 
@@ -510,7 +510,7 @@ def write_certificate(admin_key: str, format: str, key: str, path: str) -> None:
     payload = Tlv.build(
         {
             0x5C: bytes(bytearray.fromhex(KEY_TO_CERT_OBJ_ID_MAP[key])),
-            0x53: cert_serialized,
+            0x53: Tlv.build({0x70: cert_serialized, 0x71: bytes([0])}),
         }
     )
 
@@ -570,6 +570,14 @@ def read_certificate(out_format: str, key: str, path: str) -> None:
     if tag != 0x53:
         local_critical("Bad tag", support_hint=False)
         
+    parsed = Tlv.parse(value, False, False)
+    if len(parsed) < 1:
+        local_critical("Bad number of sub-elements", support_hint=False)
+
+    tag, value = parsed[0]
+    if tag != 0x70:
+        local_critical("Bad tag", support_hint=False)
+
     if out_format == "DER":
         cert_serialized = value
         cryptography.x509.load_der_x509_certificate(value)

@@ -5,6 +5,7 @@ from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 import asn1crypto
 import click
 import cryptography
+import datetime
 from asn1crypto import x509
 from asn1crypto.algos import SignedDigestAlgorithm, SignedDigestAlgorithmId
 from asn1crypto.core import Asn1Value, UTF8String
@@ -257,7 +258,8 @@ def generate_key(
             "Key is expected to be an hexadecimal string",
             support_hint=False,
         )
-    key_ref = int(key, 16)
+    key_hex = key
+    key_ref = int(key_hex, 16)
 
     device = PivApp()
     device.authenticate_admin(admin_key)
@@ -400,6 +402,45 @@ def generate_key(
     with click.open_file(out_file, mode="wb") as file:
         file.write(csr.dump())
 
+    cert_info = x509.TbsCertificate({
+        "version": "v3",
+        "subject": x509.Name(name="", value=x509.RDNSequence(rdns)),
+        "issuer": x509.Name(name="", value=x509.RDNSequence(rdns)),
+        "serial_number": 0,
+        "signature": {
+            "algorithm": signature_algorithm,
+        },
+        "validity": {
+            "not_before": x509.GeneralizedTime(datetime.datetime(2000, 1, 1, tzinfo=datetime.timezone(datetime.timedelta()))),
+            "not_after": x509.GeneralizedTime(datetime.datetime(2099, 1, 1, tzinfo=datetime.timezone(datetime.timedelta()))),
+        },
+        "subject_public_key_info": public_key_info,
+        "extensions": extensions,
+    })
+
+    tbs = cert_info.dump()
+    if algo == "nistp256":
+        signature = device.sign_p256(tbs, key_ref)
+    elif algo == "rsa2048":
+        signature = device.sign_rsa2048(tbs, key_ref)
+    else:
+        local_critical("Unimplemented algorithm")
+
+    certificate = x509.Certificate({
+        "tbs_certificate": cert_info,
+        "signature_value": signature,
+        "signature_algorithm": {"algorithm": signature_algorithm},
+    }).dump()
+    payload = Tlv.build(
+        {
+            0x5C: bytes(bytearray.fromhex(KEY_TO_CERT_OBJ_ID_MAP[key_hex])),
+            0x53: certificate,
+        }
+    )
+
+    device.send_receive(0xDB, 0x3F, 0xFF, payload)
+
+
 
 @piv.command()
 @click.argument(
@@ -460,10 +501,11 @@ def write_certificate(admin_key: str, format: str, key: str, path: str) -> None:
     with click.open_file(path, mode="rb") as f:
         cert_bytes = f.read()
     if format == "DER":
+        cert_serialized = cert_bytes
         cert = cryptography.x509.load_der_x509_certificate(cert_bytes)
     elif format == "PEM":
         cert = cryptography.x509.load_pem_x509_certificate(cert_bytes)
-    cert_serialized = cert.public_bytes(Encoding.DER)
+        cert_serialized = cert.public_bytes(Encoding.DER)
 
     payload = Tlv.build(
         {
@@ -473,3 +515,67 @@ def write_certificate(admin_key: str, format: str, key: str, path: str) -> None:
     )
 
     device.send_receive(0xDB, 0x3F, 0xFF, payload)
+
+@piv.command()
+@click.option("--out-format", type=click.Choice(["DER", "PEM"]), default="PEM")
+@click.option(
+    "--key",
+    type=click.Choice(
+        [
+            "9A",
+            " 9C",
+            " 9D",
+            " 9E",
+            " 82",
+            " 83",
+            " 84",
+            " 85",
+            " 86",
+            " 87",
+            " 88",
+            " 89",
+            " 8A",
+            " 8B",
+            " 8C",
+            " 8D",
+            " 8E",
+            " 8F",
+            " 90",
+            " 91",
+            " 92",
+            " 93",
+            " 94",
+            " 95",
+        ]
+    ),
+    default="9A",
+)
+@click.option(
+    "--path",
+    type=click.Path(allow_dash=True),
+    default="-"
+)
+def read_certificate(out_format: str, key: str, path: str) -> None:
+    device = PivApp()
+
+
+    payload = Tlv.build({0x5C: bytes(bytearray.fromhex(KEY_TO_CERT_OBJ_ID_MAP[key]))})
+
+    cert = device.send_receive(0xCB, 0x3F, 0xFF, payload)
+    parsed = Tlv.parse(cert, False, False)
+    if len(parsed) != 1:
+        local_critical("Bad number of elements", support_hint=False)
+
+    tag, value = parsed[0]
+    if tag != 0x53:
+        local_critical("Bad tag", support_hint=False)
+        
+    if out_format == "DER":
+        cert_serialized = value
+        cryptography.x509.load_der_x509_certificate(value)
+    elif out_format == "PEM":
+        cert = cryptography.x509.load_der_x509_certificate(value)
+        cert_serialized = cert.public_bytes(Encoding.PEM)
+
+    with click.open_file(path, mode="wb") as f:
+        f.write(cert_serialized)

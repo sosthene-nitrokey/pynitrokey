@@ -64,6 +64,27 @@ def init(admin_key: str) -> None:
     local_print("Device intialized successfully")
     local_print(f"GUID: {guid.hex().upper()}")
 
+@piv.command()
+def info() -> None:
+    device = PivApp()
+    serial_number = device.serial()
+    local_print(f"Device: {serial_number}")
+    reader = device.reader()
+    local_print(f"Reader: {reader}")
+    guid = device.guid()
+    local_print(f"GUID: {guid.hex().upper()}")
+
+    printed_head = False
+    for key, slot in KEY_TO_CERT_OBJ_ID_MAP.items():
+        cert = device.cert(bytes(bytearray.fromhex(slot)))
+        if cert is not None:
+            if not printed_head:
+                local_print(f"Keys:")
+                printed_head = True
+            local_print(f"    {key}")
+    if not printed_head:
+        local_print("No certificate found")
+    pass
 
 @piv.command()
 @click.option(
@@ -472,7 +493,7 @@ def generate_key(
     ).dump()
     payload = Tlv.build(
         {
-            0x5C: bytes(bytearray.fromhex(KEY_TO_CERT_OBJ_ID_MAP[key])),
+            0x5C: bytes(bytearray.fromhex(KEY_TO_CERT_OBJ_ID_MAP[key_hex])),
             0x53: Tlv.build({0x70: certificate, 0x71: bytes([0])}),
         }
     )

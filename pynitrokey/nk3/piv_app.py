@@ -34,6 +34,14 @@ def prepare_for_pkcs1v15_sign_2048(data: bytes) -> bytes:
     assert len(total) == 256
     return total
 
+class StatusError(Exception):
+    id: int
+    def __init__(self, value: int):
+        self.value = value
+
+    def __str__(self):
+        return f"{hex(self.value)}"
+
 
 class PivApp:
     log: logging.Logger
@@ -151,7 +159,7 @@ class PivApp:
                 data_final += bytes(result)
 
         if status_bytes != b"\x90\x00" and status_bytes[0] != MORE_DATA_STATUS_BYTE:
-            raise ValueError(f"{status_bytes.hex()}, Received error")
+            raise StatusError(int.from_bytes(status_bytes, byteorder="big"))
 
         if log_multipacket:
             self.logfn(
@@ -331,3 +339,28 @@ class PivApp:
         )
         self.send_receive(0xDB, 0x3F, 0xFF, pinfo_body)
         return card_id
+
+    def serial(self) -> int:
+        response = self.send_receive(0x01, 0x00, 0x00)
+        return int.from_bytes(response, byteorder="big")
+
+    def reader(self) -> str:
+        return self.cardservice.connection.getReader()
+
+    def guid(self) -> bytes:
+        payload = Tlv.build({0x5C: bytes(bytearray.fromhex("5FC102"))})
+        chuid = self.send_receive(0xCB, 0x3F, 0xFF, payload)
+
+        return find_by_id(0x34, Tlv.parse(find_by_id(0x53, Tlv.parse(chuid))))
+
+    def cert(self, container_id: bytes) -> Optional[bytes]:
+        payload = Tlv.build({0x5C: container_id})
+        try:
+            cert = self.send_receive(0xCB, 0x3F, 0xFF, payload)
+            return find_by_id(0x53, Tlv.parse(cert))
+        except StatusError as e:
+            if e.value == 0x6A82:
+                return None
+            else:
+                raise ValueError(f"{e.value.hex()}, Received error")
+

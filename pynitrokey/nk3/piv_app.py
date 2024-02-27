@@ -123,9 +123,7 @@ class PivApp:
         l = len(result)
         result = bytes(result)
         status_bytes = bytes([sw1, sw2])
-        self.logfn(
-            f"Received [{status_bytes.hex()}] {result.hex()}"
-        )
+        self.logfn(f"Received [{status_bytes.hex()}] {result.hex()}")
 
         log_multipacket = False
         data_final = bytes(result)
@@ -152,9 +150,7 @@ class PivApp:
             l = len(result)
             result = bytes(result)
             status_bytes = bytes([sw1, sw2])
-            self.logfn(
-                f"Received [{status_bytes.hex()}] {bytes(result).hex()}"
-            )
+            self.logfn(f"Received [{status_bytes.hex()}] {bytes(result).hex()}")
             if status_bytes[0] in [0x90, MORE_DATA_STATUS_BYTE]:
                 data_final += bytes(result)
 
@@ -313,18 +309,29 @@ class PivApp:
     def init(self) -> bytes:
         # Template for card capabilities with nothing but a random ID
         template_begin = bytearray.fromhex("f015a000000116")
-        template_end = bytearray.fromhex("f10121f20121f300f40100f50110f600f700fa00fb00fc00fd00fe00")
+        template_end = bytearray.fromhex(
+            "f10121f20121f300f40100f50110f600f700fa00fb00fc00fd00fe00"
+        )
         card_id = os.urandom(16)
-        cardcaps = template_begin + card_id + template_end 
-        cardcaps_body = Tlv.build({0x5C: bytes(bytearray.fromhex("5fc107")), 0x53: bytes(cardcaps)})
+        cardcaps = template_begin + card_id + template_end
+        cardcaps_body = Tlv.build(
+            {0x5C: bytes(bytearray.fromhex("5fc107")), 0x53: bytes(cardcaps)}
+        )
         self.send_receive(0xDB, 0x3F, 0xFF, cardcaps_body)
 
-        pinfo_body = Tlv.build({0x5C: bytes(bytearray.fromhex("5FC109")), 0x53: Tlv.build({
-            0x01: "Nitrokey PIV user".encode("ascii"),
-            # TODO: use representation of real serial number of card (currently static value)
-            # Base 10 representation of
-            # https://github.com/Nitrokey/piv-authenticator/blob/2c948a966f3e410e9a4cee3c351ca20b956383e0/src/lib.rs#L197
-            0x05: "5437251".encode("ascii"), 
-        })})
+        pinfo_body = Tlv.build(
+            {
+                0x5C: bytes(bytearray.fromhex("5FC109")),
+                0x53: Tlv.build(
+                    {
+                        0x01: "Nitrokey PIV user".encode("ascii"),
+                        # TODO: use representation of real serial number of card (currently static value)
+                        # Base 10 representation of
+                        # https://github.com/Nitrokey/piv-authenticator/blob/2c948a966f3e410e9a4cee3c351ca20b956383e0/src/lib.rs#L197
+                        0x05: "5437251".encode("ascii"),
+                    }
+                ),
+            }
+        )
         self.send_receive(0xDB, 0x3F, 0xFF, pinfo_body)
         return card_id

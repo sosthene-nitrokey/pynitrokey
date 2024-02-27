@@ -1,3 +1,4 @@
+import datetime
 import os
 import sys
 from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
@@ -5,12 +6,10 @@ from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 import asn1crypto
 import click
 import cryptography
-import datetime
-from asn1crypto import x509
+from asn1crypto import csr, x509
 from asn1crypto.algos import SignedDigestAlgorithm, SignedDigestAlgorithmId
 from asn1crypto.core import Asn1Value, UTF8String
 from asn1crypto.csr import CertificationRequest, CertificationRequestInfo
-from asn1crypto import csr
 from asn1crypto.keys import PublicKeyInfo
 from ber_tlv.tlv import Tlv
 from click_aliases import ClickAliasedGroup
@@ -48,6 +47,7 @@ def admin_auth(admin_key: str) -> None:
     device.authenticate_admin(admin_key)
     local_print("Authenticated successfully")
 
+
 @piv.command()
 @click.argument(
     "admin-key",
@@ -68,6 +68,7 @@ def init(admin_key: str) -> None:
     guid = device.init()
     local_print("Device intialized successfully")
     local_print(f"GUID: {guid.hex().upper()}")
+
 
 @piv.command()
 @click.option(
@@ -376,19 +377,30 @@ def generate_key(
         {
             "extn_id": "extended_key_usage",
             "critical": False,
-            "extn_value": x509.ExtKeyUsageSyntax(["client_auth", "microsoft_smart_card_logon"]),
+            "extn_value": x509.ExtKeyUsageSyntax(
+                ["client_auth", "microsoft_smart_card_logon"]
+            ),
         },
     ]
 
     if subject_alt_name_upn is not None:
-        extensions.append({
-            "extn_id": "subject_alt_name",
-            "critical": False,
-            "extn_value": [x509.GeneralName(
-                "other_name",
-                {"type_id": "1.3.6.1.4.1.311.20.2.3", "value": x509.UTF8String(subject_alt_name_upn).retag({"explicit": 0})}
-            )]
-        })
+        extensions.append(
+            {
+                "extn_id": "subject_alt_name",
+                "critical": False,
+                "extn_value": [
+                    x509.GeneralName(
+                        "other_name",
+                        {
+                            "type_id": "1.3.6.1.4.1.311.20.2.3",
+                            "value": x509.UTF8String(subject_alt_name_upn).retag(
+                                {"explicit": 0}
+                            ),
+                        },
+                    )
+                ],
+            }
+        )
 
     csr_info = CertificationRequestInfo(
         {
@@ -422,21 +434,31 @@ def generate_key(
     with click.open_file(out_file, mode="wb") as file:
         file.write(csr.dump())
 
-    cert_info = x509.TbsCertificate({
-        "version": "v3",
-        "subject": x509.Name(name="", value=x509.RDNSequence(rdns)),
-        "issuer": x509.Name(name="", value=x509.RDNSequence(rdns)),
-        "serial_number": 0,
-        "signature": {
-            "algorithm": signature_algorithm,
-        },
-        "validity": {
-            "not_before": x509.GeneralizedTime(datetime.datetime(2000, 1, 1, tzinfo=datetime.timezone(datetime.timedelta()))),
-            "not_after": x509.GeneralizedTime(datetime.datetime(2099, 1, 1, tzinfo=datetime.timezone(datetime.timedelta()))),
-        },
-        "subject_public_key_info": public_key_info,
-        "extensions": extensions,
-    })
+    cert_info = x509.TbsCertificate(
+        {
+            "version": "v3",
+            "subject": x509.Name(name="", value=x509.RDNSequence(rdns)),
+            "issuer": x509.Name(name="", value=x509.RDNSequence(rdns)),
+            "serial_number": 0,
+            "signature": {
+                "algorithm": signature_algorithm,
+            },
+            "validity": {
+                "not_before": x509.GeneralizedTime(
+                    datetime.datetime(
+                        2000, 1, 1, tzinfo=datetime.timezone(datetime.timedelta())
+                    )
+                ),
+                "not_after": x509.GeneralizedTime(
+                    datetime.datetime(
+                        2099, 1, 1, tzinfo=datetime.timezone(datetime.timedelta())
+                    )
+                ),
+            },
+            "subject_public_key_info": public_key_info,
+            "extensions": extensions,
+        }
+    )
 
     tbs = cert_info.dump()
     if algo == "nistp256":
@@ -446,11 +468,13 @@ def generate_key(
     else:
         local_critical("Unimplemented algorithm")
 
-    certificate = x509.Certificate({
-        "tbs_certificate": cert_info,
-        "signature_value": signature,
-        "signature_algorithm": {"algorithm": signature_algorithm},
-    }).dump()
+    certificate = x509.Certificate(
+        {
+            "tbs_certificate": cert_info,
+            "signature_value": signature,
+            "signature_algorithm": {"algorithm": signature_algorithm},
+        }
+    ).dump()
     payload = Tlv.build(
         {
             0x5C: bytes(bytearray.fromhex(KEY_TO_CERT_OBJ_ID_MAP[key])),
@@ -459,7 +483,6 @@ def generate_key(
     )
 
     device.send_receive(0xDB, 0x3F, 0xFF, payload)
-
 
 
 @piv.command()
@@ -536,6 +559,7 @@ def write_certificate(admin_key: str, format: str, key: str, path: str) -> None:
 
     device.send_receive(0xDB, 0x3F, 0xFF, payload)
 
+
 @piv.command()
 @click.option("--out-format", type=click.Choice(["DER", "PEM"]), default="PEM")
 @click.option(
@@ -570,14 +594,9 @@ def write_certificate(admin_key: str, format: str, key: str, path: str) -> None:
     ),
     default="9A",
 )
-@click.option(
-    "--path",
-    type=click.Path(allow_dash=True),
-    default="-"
-)
+@click.option("--path", type=click.Path(allow_dash=True), default="-")
 def read_certificate(out_format: str, key: str, path: str) -> None:
     device = PivApp()
-
 
     payload = Tlv.build({0x5C: bytes(bytearray.fromhex(KEY_TO_CERT_OBJ_ID_MAP[key]))})
 
@@ -589,7 +608,7 @@ def read_certificate(out_format: str, key: str, path: str) -> None:
     tag, value = parsed[0]
     if tag != 0x53:
         local_critical("Bad tag", support_hint=False)
-        
+
     parsed = Tlv.parse(value, False, False)
     if len(parsed) < 1:
         local_critical("Bad number of sub-elements", support_hint=False)

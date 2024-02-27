@@ -82,7 +82,9 @@ def info() -> None:
             if not printed_head:
                 local_print(f"Keys:")
                 printed_head = True
+            cert = cryptography.x509.load_der_x509_certificate(cert)
             local_print(f"    {key}")
+            local_print(f"        algorithm: {cert.signature_algorithm_oid._name}")
     if not printed_head:
         local_print("No certificate found")
     pass

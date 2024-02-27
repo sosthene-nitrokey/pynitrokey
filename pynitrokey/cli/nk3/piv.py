@@ -48,6 +48,26 @@ def admin_auth(admin_key: str) -> None:
     device.authenticate_admin(admin_key)
     local_print("Authenticated successfully")
 
+@piv.command()
+@click.argument(
+    "admin-key",
+    type=click.STRING,
+    default="010203040506070801020304050607080102030405060708",
+)
+def init(admin_key: str) -> None:
+    try:
+        admin_key: bytes = bytearray.fromhex(admin_key)
+    except:
+        local_critical(
+            "Key is expected to be an hexadecimal string",
+            support_hint=False,
+        )
+
+    device = PivApp()
+    device.authenticate_admin(admin_key)
+    guid = device.init()
+    local_print("Device intialized successfully")
+    local_print(f"GUID: {guid.hex().upper()}")
 
 @piv.command()
 @click.option(

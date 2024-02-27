@@ -357,7 +357,24 @@ class PivApp:
         payload = Tlv.build({0x5C: container_id})
         try:
             cert = self.send_receive(0xCB, 0x3F, 0xFF, payload)
-            return find_by_id(0x53, Tlv.parse(cert))
+            parsed = Tlv.parse(cert, False, False)
+            if len(parsed) != 1:
+                local_critical("Bad number of elements", support_hint=False)
+
+            tag, value = parsed[0]
+            if tag != 0x53:
+                local_critical("Bad tag", support_hint=False)
+
+            parsed = Tlv.parse(value, False, False)
+            if len(parsed) < 1:
+                local_critical("Bad number of sub-elements", support_hint=False)
+
+            tag, value = parsed[0]
+            if tag != 0x70:
+                local_critical("Bad tag", support_hint=False)
+
+            return value
+
         except StatusError as e:
             if e.value == 0x6A82:
                 return None

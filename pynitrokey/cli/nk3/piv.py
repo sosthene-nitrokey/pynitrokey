@@ -2,6 +2,7 @@ import datetime
 from typing import Optional, Sequence
 
 import click
+import sys
 import cryptography
 from asn1crypto import x509
 from asn1crypto.csr import CertificationRequest, CertificationRequestInfo
@@ -583,29 +584,29 @@ def write_certificate(admin_key: str, format: str, key: str, path: str) -> None:
     type=click.Choice(
         [
             "9A",
-            " 9C",
-            " 9D",
-            " 9E",
-            " 82",
-            " 83",
-            " 84",
-            " 85",
-            " 86",
-            " 87",
-            " 88",
-            " 89",
-            " 8A",
-            " 8B",
-            " 8C",
-            " 8D",
-            " 8E",
-            " 8F",
-            " 90",
-            " 91",
-            " 92",
-            " 93",
-            " 94",
-            " 95",
+            "9C",
+            "9D",
+            "9E",
+            "82",
+            "83",
+            "84",
+            "85",
+            "86",
+            "87",
+            "88",
+            "89",
+            "8A",
+            "8B",
+            "8C",
+            "8D",
+            "8E",
+            "8F",
+            "90",
+            "91",
+            "92",
+            "93",
+            "94",
+            "95",
         ]
     ),
     default="9A",
@@ -614,24 +615,11 @@ def write_certificate(admin_key: str, format: str, key: str, path: str) -> None:
 def read_certificate(out_format: str, key: str, path: str) -> None:
     device = PivApp()
 
-    payload = Tlv.build({0x5C: bytes(bytearray.fromhex(KEY_TO_CERT_OBJ_ID_MAP[key]))})
+    value = device.cert(bytes(bytearray.fromhex(KEY_TO_CERT_OBJ_ID_MAP[key])))
 
-    cert = device.send_receive(0xCB, 0x3F, 0xFF, payload)
-    parsed = Tlv.parse(cert, False, False)
-    if len(parsed) != 1:
-        local_critical("Bad number of elements", support_hint=False)
-
-    tag, value = parsed[0]
-    if tag != 0x53:
-        local_critical("Bad tag", support_hint=False)
-
-    parsed = Tlv.parse(value, False, False)
-    if len(parsed) < 1:
-        local_critical("Bad number of sub-elements", support_hint=False)
-
-    tag, value = parsed[0]
-    if tag != 0x70:
-        local_critical("Bad tag", support_hint=False)
+    if value is None:
+        print("Certificate not found", file=sys.stderr)
+        return
 
     if out_format == "DER":
         cert_serialized = value

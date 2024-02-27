@@ -1,14 +1,9 @@
 import datetime
-import os
-import sys
-from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
+from typing import Optional, Sequence
 
-import asn1crypto
 import click
 import cryptography
-from asn1crypto import csr, x509
-from asn1crypto.algos import SignedDigestAlgorithm, SignedDigestAlgorithmId
-from asn1crypto.core import Asn1Value, UTF8String
+from asn1crypto import x509
 from asn1crypto.csr import CertificationRequest, CertificationRequestInfo
 from asn1crypto.keys import PublicKeyInfo
 from ber_tlv.tlv import Tlv

@@ -1,7 +1,6 @@
 import logging
 import os
-import typing
-from typing import Any, Callable, List, Optional, Sequence, Union
+from typing import Any, Callable, Optional, Sequence
 
 from ber_tlv.tlv import Tlv
 from cryptography.hazmat.primitives import hashes
@@ -10,8 +9,7 @@ from smartcard.CardRequest import CardRequest
 from smartcard.CardService import CardService
 from smartcard.CardType import ATRCardType
 
-from pynitrokey.helpers import local_critical, local_print
-from pynitrokey.nk3.device import Nitrokey3Device
+from pynitrokey.helpers import local_critical
 from pynitrokey.start.gnuk_token import iso7816_compose
 
 LogFn = Callable[[str], Any]
@@ -120,7 +118,6 @@ class PivApp:
             self.logfn(f"Got exception: {e}")
             raise
 
-        l = len(result)
         result = bytes(result)
         status_bytes = bytes([sw1, sw2])
         self.logfn(f"Received [{status_bytes.hex()}] {result.hex()}")
@@ -147,7 +144,6 @@ class PivApp:
                 self.logfn(f"Got exception: {e}")
                 raise
             # Data order is different here than in APDU - SW is first, then the data if any
-            l = len(result)
             result = bytes(result)
             status_bytes = bytes([sw1, sw2])
             self.logfn(f"Received [{status_bytes.hex()}] {bytes(result).hex()}")
@@ -174,17 +170,17 @@ class PivApp:
 
         if len(admin_key) == 24:
             algorithm = algorithms.TripleDES(admin_key)
-            algo = "tdes"
+            # algo = "tdes"
             algo_byte = 0x03
             expected_len = 8
         elif len(admin_key) == 16:
             algorithm = algorithms.AES128(admin_key)
-            algo = "aes128"
+            # algo = "aes128"
             algo_byte = 0x08
             expected_len = 16
         elif len(admin_key) == 32:
             algorithm = algorithms.AES256(admin_key)
-            algo = "aes256"
+            # algo = "aes256"
             algo_byte = 0x0C
             expected_len = 16
         else:
@@ -233,13 +229,13 @@ class PivApp:
 
     def set_admin_key(self, new_key: bytes) -> None:
         if len(new_key) == 24:
-            algo = "tdes"
+            # algo = "tdes"
             algo_byte = 0x03
         elif len(new_key) == 16:
-            algo = "aes128"
+            # algo = "aes128"
             algo_byte = 0x08
         elif len(new_key) == 32:
-            algo = "aes256"
+            # algo = "aes256"
             algo_byte = 0x0C
         else:
             local_critical(
